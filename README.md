@@ -10,4 +10,9 @@ Authors:
 - Maike Nowatzki
 - Noshin Sharmili
 
+
+The repository contains the original meanderpy files, and the ones containing the vegetation add-ons (called Veg_meanderpy_ESPIn2023).
+
+
+
 Credits to Zoltán Sylvester, the author of the meanderpy library. 
