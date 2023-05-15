@@ -521,6 +521,7 @@ def migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma,Cfs_north,Cfs_sou
     :param D: channel depth
     :param omega: constant in Howard & Knutson equation (= -1.0)
     :param gamma: constant in Howard & Knutson equation (= 2.5)
+    :param patch_veg: vegetation grid (= 0 if all is homogeneous) 
     :return x: new x-coordinates of centerline after migration
     :return y: new y-coordinates of centerline after migration
     '''
@@ -535,7 +536,18 @@ def migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma,Cfs_north,Cfs_sou
     Cf = np.zeros(ns) # creating a vector of cfs 
     Cf[ y > max(y)/2] = Cfs_north # condition on north bank
     Cf[ y <= max(y)/2] = Cfs_south # condition on south bank
+    
+#     if patched_veg != 0
+#         elif patched_veg = 1
+#         Cf 
+#         elif patched_veg = 2
+        
+#         elif patched_veg = 3
+    
+    
     alpha = k*2*Cf/D # exponent for convolution function G
+    
+   
        
     curv = W*curv # dimensionless curvature
     R0 = kl*curv # simple linear relationship between curvature and nominal migration rate
