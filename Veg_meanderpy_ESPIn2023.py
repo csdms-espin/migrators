@@ -136,6 +136,49 @@ class ChannelBelt:
         self.cutoffs = cutoffs
         self.cl_times = cl_times
         self.cutoff_times = cutoff_times
+        
+    def sinuosity_list(self, nit, deltas, pad, crdist, depths, Cfs, kl, dt, Cfs_south, Cfs_north):
+        """this is just to calculate and return the sinuosity
+        
+        :param nit: number of iterations
+        :param deltas: distance between nodes on centerline
+        :param pad: padding (number of nodepoints along centerline)
+        :param crdist: threshold distance at which cutoffs occur
+        :param depths: array of channel depths (can very across iterations)
+        :param Cf: array of dimensionless Chezy friction factors (can vary across iterations)
+        :param kl: migration rate constant (m/s)
+        :param aggr_factor: aggradation factor
+        :param D: channel depth (m)"""
+        
+        channel = self.channels[-1] # first channel is the same as last channel of input 
+        x = channel.x; y = channel.y; z = channel.z
+        W = channel.W
+        D = channel.D
+        k = 1.0 # constant in HK equation
+        xc = [] # initialize cutoff coordinates
+        # determine age of last channel:
+        if len(self.cl_times)>0:
+            last_cl_time = self.cl_times[-1]
+        else:
+            last_cl_time = 0
+        dx, dy, dz, ds, s = compute_derivatives(x,y,z)
+        slope = np.gradient(z)/ds
+        # padding at the beginning can be shorter than padding at the downstream end:
+        pad1 = int(pad/10.0)
+        if pad1<5:
+            pad1 = 5
+        omega = -1.0 # constant in migration rate calculation (Howard and Knutson, 1984)
+        gamma = 2.5 # from Ikeda et al., 1981 and Howard and Knutson, 1984
+        sin_list = np.array([])
+        for itn in trange(nit): # main loop
+            D = depths[itn]
+            Cf = Cfs[itn]
+            x, y, sinuosity = migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma,Cfs_south,Cfs_north)
+            sin_list = np.append(sin_list, sinuosity)
+            x,y,z,xc,yc,zc = cut_off_cutoffs(x,y,z,s,crdist,deltas) # find and execute cutoffs
+            x,y,z,dx,dy,dz,ds,s = resample_centerline(x,y,z,deltas) # resample centerline
+            slope = np.gradient(z)/ds
+        return sin_list
 
     def migrate(self, nit, saved_ts, deltas, pad, crdist, depths, Cfs, kl, kv, dt, dens, t1, t2, t3, aggr_factor, Cfs_south, Cfs_north):
         """method for computing migration rates along channel centerlines and moving the centerlines accordingly
@@ -176,10 +219,12 @@ class ChannelBelt:
             pad1 = 5
         omega = -1.0 # constant in migration rate calculation (Howard and Knutson, 1984)
         gamma = 2.5 # from Ikeda et al., 1981 and Howard and Knutson, 1984
+        sin_list = np.array([])
         for itn in trange(nit): # main loop
             D = depths[itn]
             Cf = Cfs[itn]
             x, y, sinuosity = migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma,Cfs_south,Cfs_north)
+            sin_list = np.append(sin_list, sinuosity)
             # x, y, sinuosity = migrate_one_step_w_bias(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma)
             x,y,z,xc,yc,zc = cut_off_cutoffs(x,y,z,s,crdist,deltas) # find and execute cutoffs
             x,y,z,dx,dy,dz,ds,s = resample_centerline(x,y,z,deltas) # resample centerline
@@ -211,7 +256,7 @@ class ChannelBelt:
                 self.cl_times.append(last_cl_time+(itn+1)*dt/(365*24*60*60.0))
                 channel = Channel(x,y,z,W,D) # create channel object
                 self.channels.append(channel)
-        print('The sinuosity is:', sinuosity)
+        print('The final sinuosity is:', sinuosity)
             
 
     def plot(self, plot_type, pb_age, ob_age, end_time, n_channels):
@@ -529,7 +574,6 @@ def migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma,Cfs_north,Cfs_sou
     curv = compute_curvature(x,y)
     dx, dy, dz, ds, s = compute_derivatives(x,y,z)
     sinuosity = s[-1]/(x[-1]-x[0])
-    
     
     # changed Cf to an array? 
     Cf = np.zeros(ns) # creating a vector of cfs 
