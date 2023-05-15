@@ -137,7 +137,7 @@ class ChannelBelt:
         self.cl_times = cl_times
         self.cutoff_times = cutoff_times
 
-    def migrate(self, nit, saved_ts, deltas, pad, crdist, depths, Cfs, kl, kv, dt, dens, t1, t2, t3, aggr_factor, Cfs_south, Cfs_north):
+    def migrate(self, nit, saved_ts, deltas, pad, crdist, depths, Cfs, kl, kv, dt, dens, t1, t2, t3, aggr_factor):
         """method for computing migration rates along channel centerlines and moving the centerlines accordingly
 
         :param nit: number of iterations
@@ -179,8 +179,8 @@ class ChannelBelt:
         for itn in trange(nit): # main loop
             D = depths[itn]
             Cf = Cfs[itn]
-            x, y, sinuosity = migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma,Cfs_south,Cfs_north)
-            # x, y, sinuosity = migrate_one_step_w_bias(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma)
+            x, y = migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma)
+            # x, y = migrate_one_step_w_bias(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma)
             x,y,z,xc,yc,zc = cut_off_cutoffs(x,y,z,s,crdist,deltas) # find and execute cutoffs
             x,y,z,dx,dy,dz,ds,s = resample_centerline(x,y,z,deltas) # resample centerline
             slope = np.gradient(z)/ds
@@ -211,8 +211,6 @@ class ChannelBelt:
                 self.cl_times.append(last_cl_time+(itn+1)*dt/(365*24*60*60.0))
                 channel = Channel(x,y,z,W,D) # create channel object
                 self.channels.append(channel)
-        print('The sinuosity is:', sinuosity)
-            
 
     def plot(self, plot_type, pb_age, ob_age, end_time, n_channels):
         """method  for plotting ChannelBelt object
@@ -507,7 +505,7 @@ def resample_centerline(x,y,z,deltas):
     dx, dy, dz, ds, s = compute_derivatives(x,y,z) # recompute derivatives
     return x,y,z,dx,dy,dz,ds,s
 
-def migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma,Cfs_north,Cfs_south):
+def migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma):
     '''migrate centerline during one time step, using the migration computed as in Howard & Knutson (1984)
 
     :param x: x-coordinates of centerline
@@ -529,17 +527,9 @@ def migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma,Cfs_north,Cfs_sou
     curv = compute_curvature(x,y)
     dx, dy, dz, ds, s = compute_derivatives(x,y,z)
     sinuosity = s[-1]/(x[-1]-x[0])
-    
-    
-    # changed Cf to an array? 
-    Cf = np.zeros(ns) # creating a vector of cfs 
-    Cf[ y > max(y)/2] = Cfs_north # condition on north bank
-    Cf[ y <= max(y)/2] = Cfs_south # condition on south bank
-    alpha = k*2*Cf/D # exponent for convolution function G
-       
     curv = W*curv # dimensionless curvature
     R0 = kl*curv # simple linear relationship between curvature and nominal migration rate
-    
+    alpha = k*2*Cf/D # exponent for convolution function G
     R1 = compute_migration_rate(pad,ns,ds,alpha,omega,gamma,R0)
     R1 = sinuosity**(-2/3.0)*R1
     # calculate new centerline coordinates:
@@ -548,7 +538,7 @@ def migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma,Cfs_north,Cfs_sou
     # adjust x and y coordinates (this *is* the migration):
     x[pad1:ns-pad+1] = x[pad1:ns-pad+1] + R1[pad1:ns-pad+1]*dy_ds*dt  
     y[pad1:ns-pad+1] = y[pad1:ns-pad+1] - R1[pad1:ns-pad+1]*dx_ds*dt 
-    return x,y,sinuosity
+    return x,y
 
 def migrate_one_step_w_bias(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma):
     ns=len(x)
@@ -598,7 +588,6 @@ def compute_migration_rate(pad,ns,ds,alpha,omega,gamma,R0):
     pad - padding (number of nodepoints along centerline)
     ns - number of points in centerline
     ds - distances between points in centerline
-    alpha - array of alphas (depending on Cfs)
     omega - constant in HK model
     gamma - constant in HK model
     R0 - nominal migration rate (dimensionless curvature * migration rate constant)"""
@@ -608,8 +597,7 @@ def compute_migration_rate(pad,ns,ds,alpha,omega,gamma,R0):
         pad1 = 5
     for i in range(pad1,ns-pad):
         si2 = np.hstack((np.array([0]),np.cumsum(ds[i-1::-1])))  # distance along centerline, backwards from current point 
-        # alpha[i-1::-1]
-        G = np.exp(-alpha[i]*si2) # convolution vector
+        G = np.exp(-alpha*si2) # convolution vector
         R1[i] = omega*R0[i] + gamma*np.sum(R0[i::-1]*G)/np.sum(G) # main equation
     return R1
 
