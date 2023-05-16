@@ -250,6 +250,20 @@ class ChannelBelt:
             pb_cmap = make_colormap([green,green,pb_crit,green,pb_color,1.0,pb_color]) # colormap for point bars
             ob_cmap = make_colormap([green,green,ob_crit,green,ob_color,1.0,ob_color]) # colormap for oxbows
             plt.fill([xmin,xmax,xmax,xmin],[ymin,ymin,ymax,ymax],color=(106/255.0,159/255.0,67/255.0))
+        if plot_type == 'Veg':
+            pb_crit = len(times[times<times[-1]-pb_age])/float(len(times))
+            ob_crit = len(times[times<times[-1]-ob_age])/float(len(times))
+            green = (0/255.0,159/255.0,67/255.0)
+            red = (216/255.0, 27/255.0, 96/255.0)
+            blue = (30/255.0,136/255.0,229/255.0)
+            green_North = (255/255.0, 193/255.0, 7/255.0) # vegetation color
+            green_South = (0/255.0, 77/255.0, 64/255.0) # vegetation color
+            pb_color = red # point bar color
+            ob_color = blue # oxbow color
+            pb_cmap = make_colormap([green,green,pb_crit,green,pb_color,1.0,pb_color]) # colormap for point bars
+            ob_cmap = make_colormap([red,red,ob_crit,red,ob_color,1.0,ob_color]) # colormap for oxbows
+            plt.fill([xmin,xmax,xmax,xmin],[0,0,ymax,ymax],color=green_North)
+            plt.fill([xmin,xmax,xmax,xmin],[ymin,ymin,0,0],color=green_South)
         if plot_type == 'age':
             age_cmap = cm.get_cmap('magma', n_channels)
         for i in range(0,len(times)):
@@ -264,9 +278,33 @@ class ChannelBelt:
                         plt.fill(xm,ym,facecolor=pb_cmap(i/float(len(times)-1)),edgecolor='k',linewidth=0.2)
                     else:
                         plt.fill(xm,ym,facecolor=pb_cmap(i/float(len(times)-1)))
+                
+                # if plot_type == 'Veg':
+                #     if times[i]>times[-1]-pb_age:
+                #         plt.fill(xm,ym,facecolor=pb_cmap(i/float(len(times)-1)),edgecolor='k',linewidth=0.2)
+                #     else:
+                #         plt.fill(xm,ym,facecolor=pb_cmap(i/float(len(times)-1)))
+                
+                # Changing fill color?
+                # if plot_type == 'Veg':
+                #     if times[i]>times[-1]-pb_age:
+                #         plt.fill(xm,ym,facecolor=(1.0,1.0,1.0),edgecolor='k',linewidth=0.2)
+                #     else:
+                #         plt.fill(xm,ym,facecolor=pb_cmap(i/float(len(times)-1)))
+               
+            # Changing fill color?
+                if plot_type == 'Veg':
+                    if times[i]>times[-1]-pb_age:
+                        plt.fill(xm,ym,facecolor=(1.0,1.0,1.0),edgecolor='k',linewidth=0.2)
+                    else:
+                        plt.fill(xm,ym,facecolor=(1.0, 1.0, 1.0)) 
                 if plot_type == 'strat':
+                    green_North = (255/255.0, 193/255.0, 7/255.0) # vegetation color
+                    green_South = (0/255.0, 77/255.0, 64/255.0) # vegetation color
                     order += 1
                     plt.fill(xm, ym, 'xkcd:light tan', edgecolor='k', linewidth=0.25, zorder=order)
+                    plt.fill([xmin,xmax,xmax,xmin],[0,0,ymax,ymax],color=green_North)
+                    plt.fill([xmin,xmax,xmax,xmin],[ymin,ymin,0,0],color=green_South)
                 if plot_type == 'age':
                     order += 1
                     plt.fill(xm,ym,facecolor=age_cmap(i/float(n_channels-1)),edgecolor='k',linewidth=0.1,zorder=order)
@@ -278,9 +316,12 @@ class ChannelBelt:
                     xm, ym = get_channel_banks(x1,y1,self.cutoffs[ind].W)
                     if plot_type == 'morph':
                         plt.fill(xm,ym,color=ob_cmap(i/float(len(times)-1)))
+                    if plot_type == 'Veg':
+                        plt.fill(xm,ym,color=ob_cmap(i/float(len(times)-1)))
                     if plot_type == 'strat':
                         order = order+1
                         plt.fill(xm, ym, 'xkcd:ocean blue', edgecolor='k', linewidth=0.25, zorder=order)
+                        #plt.fill(xm, ym, color=(1.0,1.0,1.0), edgecolor='k', linewidth=0.25, zorder=order)
                     if plot_type == 'age':
                         order += 1
                         plt.fill(xm, ym, 'xkcd:sea blue', edgecolor='k', linewidth=0.1, zorder=order)
@@ -291,8 +332,15 @@ class ChannelBelt:
         order = order+1
         if plot_type == 'age':
             plt.fill(xm, ym, color='xkcd:sea blue', zorder=order, edgecolor='k', linewidth=0.1)
+            #plt.fill(xm, ym, color=(1.0,1.0,1.0), zorder=order, edgecolor='k', linewidth=0.1)
         else:
-            plt.fill(xm, ym, color=(16/255.0,73/255.0,90/255.0), zorder=order) #,edgecolor='k')
+            #plt.fill(xm, ym, color=(16/255.0,73/255.0,90/255.0), zorder=order) #,edgecolor='k')
+            plt.fill(xm, ym, color=(1.0,1.0,1.0), zorder=order, edgecolor='k', linewidth=0.1)
+            
+#         if plot_type == 'Veg':
+#             plt.fill([xmin,xmax,xmax,xmin],[ymax/2,ymax/2,ymax,ymax],color=green_North)
+#             plt.fill([xmin,xmax,xmax,xmin],[ymin,ymin,ymax/2,ymax/2],color=green_South)
+            
         plt.axis('equal')
         plt.xlim(xmin,xmax)
         plt.ylim(ymin,ymax)
