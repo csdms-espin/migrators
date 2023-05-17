@@ -136,55 +136,8 @@ class ChannelBelt:
         self.cutoffs = cutoffs
         self.cl_times = cl_times
         self.cutoff_times = cutoff_times
-        
-    def sinuosity_list(self, nit, deltas, pad, crdist, depths, Cfs, kl, dt, Cfs_south, Cfs_north):
-        """this is just to calculate and return the sinuosity
-        
-        :param nit: number of iterations
-        :param deltas: distance between nodes on centerline
-        :param pad: padding (number of nodepoints along centerline)
-        :param crdist: threshold distance at which cutoffs occur
-        :param depths: array of channel depths (can very across iterations)
-        :param Cf: array of dimensionless Chezy friction factors (can vary across iterations)
-        :param kl: migration rate constant (m/s)
-        :param aggr_factor: aggradation factor
-        :param D: channel depth (m)"""
-        
-        channel = self.channels[-1] # first channel is the same as last channel of input 
-        x = channel.x; y = channel.y; z = channel.z
-        W = channel.W
-        D = channel.D
-        k = 1.0 # constant in HK equation
-        xc = [] # initialize cutoff coordinates
-        # determine age of last channel:
-        if len(self.cl_times)>0:
-            last_cl_time = self.cl_times[-1]
-        else:
-            last_cl_time = 0
-        dx, dy, dz, ds, s = compute_derivatives(x,y,z)
-        slope = np.gradient(z)/ds
-        # padding at the beginning can be shorter than padding at the downstream end:
-        pad1 = int(pad/10.0)
-        if pad1<5:
-            pad1 = 5
-        omega = -1.0 # constant in migration rate calculation (Howard and Knutson, 1984)
-        gamma = 2.5 # from Ikeda et al., 1981 and Howard and Knutson, 1984
-        sin_list = np.array([])
-        north_cutoff = 0
-        south_cutoff = 0
-    
-        for itn in trange(nit): # main loop
-            D = depths[itn]
-            Cf = Cfs[itn]
-            x, y, sinuosity = migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma,Cfs_south,Cfs_north)
-            sin_list = np.append(sin_list, sinuosity)
-            
-            x,y,z,xc,yc,zc = cut_off_cutoffs(x,y,z,s,crdist,deltas) # find and execute cutoffs
-            x,y,z,dx,dy,dz,ds,s = resample_centerline(x,y,z,deltas) # resample centerline
-            slope = np.gradient(z)/ds
-        return sin_list
-    
-    def cutoff_list(self, nit, saved_ts, deltas, pad, crdist, depths, Cfs, kl, kv, dt, dens, t1, t2, t3, aggr_factor, Cfs_south, Cfs_north):
+
+    def migrate(self, nit, saved_ts, deltas, pad, crdist, depths, kl, kv, dt, dens, t1, t2, t3, aggr_factor, Cfs_north, Cfs_south):
         """method for computing migration rates along channel centerlines and moving the centerlines accordingly
 
         :param nit: number of iterations
@@ -223,96 +176,10 @@ class ChannelBelt:
             pad1 = 5
         omega = -1.0 # constant in migration rate calculation (Howard and Knutson, 1984)
         gamma = 2.5 # from Ikeda et al., 1981 and Howard and Knutson, 1984
-        sin_list = np.array([])
-        cutoff_list = []
         for itn in trange(nit): # main loop
             D = depths[itn]
-            Cf = Cfs[itn]
-            x, y, sinuosity = migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma,Cfs_south,Cfs_north)
-            sin_list = np.append(sin_list, sinuosity)
-            # x, y, sinuosity = migrate_one_step_w_bias(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma)
-            x,y,z,xc,yc,zc = cut_off_cutoffs(x,y,z,s,crdist,deltas) # find and execute cutoffs
-            x,y,z,dx,dy,dz,ds,s = resample_centerline(x,y,z,deltas) # resample centerline
-            slope = np.gradient(z)/ds
-            # for itn<=t1, z is unchanged; for itn>t1:
-            if (itn>t1) & (itn<=t2): # incision
-                if np.min(np.abs(slope))!=0: # if slope is not zero
-                    z = z + kv*dens*9.81*D*slope*dt
-                else:
-                    z = z - kv*dens*9.81*D*dt*0.05 # if slope is zero
-            if (itn>t2) & (itn<=t3): # lateral migration
-                if np.min(np.abs(slope))!=0: # if slope is not zero
-                    # use the median slope to counterbalance incision:
-                    z = z + kv*dens*9.81*D*slope*dt - kv*dens*9.81*D*np.median(slope)*dt
-                else:
-                    z = z # no change in z
-            if (itn>t3): # aggradation
-                if np.min(np.abs(slope))!=0: # if slope is not zero
-                    # 'aggr_factor' should be larger than 1 so that this leads to overall aggradation:
-                    z = z + kv*dens*9.81*D*slope*dt - aggr_factor*kv*dens*9.81*D*np.mean(slope)*dt 
-                else:
-                    z = z + aggr_factor*dt
-            if len(xc)>0: # save cutoff data
-                self.cutoff_times.append(last_cl_time+(itn+1)*dt/(365*24*60*60.0))
-                cutoff = Cutoff(xc,yc,zc,W,D) # create cutoff object
-                cutoff_list = np.append(cutoff_list, cutoff)
-                self.cutoffs.append(cutoff)
-            # saving centerlines (with the exception of first channel):
-            if (np.mod(itn, saved_ts) == 0) & (itn > 0):
-                self.cl_times.append(last_cl_time+(itn+1)*dt/(365*24*60*60.0))
-                channel = Channel(x,y,z,W,D) # create channel object
-                self.channels.append(channel)
-            else: 
-                cutoff = 'boing'
-                
-        return cutoff_list
-
-    def migrate(self, nit, saved_ts, deltas, pad, crdist, depths, Cfs, kl, kv, dt, dens, t1, t2, t3, aggr_factor, Cfs_south, Cfs_north):
-        """method for computing migration rates along channel centerlines and moving the centerlines accordingly
-
-        :param nit: number of iterations
-        :param saved_ts: which time steps will be saved; e.g., if saved_ts = 10, every tenth time step will be saved
-        :param deltas: distance between nodes on centerline
-        :param pad: padding (number of nodepoints along centerline)
-        :param crdist: threshold distance at which cutoffs occur
-        :param depths: array of channel depths (can very across iterations)
-        :param Cf: array of dimensionless Chezy friction factors (can vary across iterations)
-        :param kl: migration rate constant (m/s)
-        :param kv: vertical slope-dependent erosion rate constant (m/s)
-        :param dt: time step (s)
-        :param dens: density of fluid (kg/m3)
-        :param t1: time step when incision starts
-        :param t2: time step when lateral migration starts
-        :param t3: time step when aggradation starts
-        :param aggr_factor: aggradation factor
-        :param D: channel depth (m)"""
-
-        channel = self.channels[-1] # first channel is the same as last channel of input
-        x = channel.x; y = channel.y; z = channel.z
-        W = channel.W
-        D = channel.D
-        k = 1.0 # constant in HK equation
-        xc = [] # initialize cutoff coordinates
-        # determine age of last channel:
-        if len(self.cl_times)>0:
-            last_cl_time = self.cl_times[-1]
-        else:
-            last_cl_time = 0
-        dx, dy, dz, ds, s = compute_derivatives(x,y,z)
-        slope = np.gradient(z)/ds
-        # padding at the beginning can be shorter than padding at the downstream end:
-        pad1 = int(pad/10.0)
-        if pad1<5:
-            pad1 = 5
-        omega = -1.0 # constant in migration rate calculation (Howard and Knutson, 1984)
-        gamma = 2.5 # from Ikeda et al., 1981 and Howard and Knutson, 1984
-        sin_list = np.array([])
-        for itn in trange(nit): # main loop
-            D = depths[itn]
-            Cf = Cfs[itn]
-            x, y, sinuosity = migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma,Cfs_south,Cfs_north)
-            sin_list = np.append(sin_list, sinuosity)
-            # x, y, sinuosity = migrate_one_step_w_bias(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma)
+            x, y = migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma,Cfs_south,Cfs_north)
+            # x, y = migrate_one_step_w_bias(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma)
             x,y,z,xc,yc,zc = cut_off_cutoffs(x,y,z,s,crdist,deltas) # find and execute cutoffs
             x,y,z,dx,dy,dz,ds,s = resample_centerline(x,y,z,deltas) # resample centerline
             slope = np.gradient(z)/ds
@@ -343,8 +210,6 @@ class ChannelBelt:
                 self.cl_times.append(last_cl_time+(itn+1)*dt/(365*24*60*60.0))
                 channel = Channel(x,y,z,W,D) # create channel object
                 self.channels.append(channel)
-        print('The final sinuosity is:', sinuosity)
-            
 
     def plot(self, plot_type, pb_age, ob_age, end_time, n_channels):
         """method  for plotting ChannelBelt object
@@ -398,8 +263,14 @@ class ChannelBelt:
                     else:
                         plt.fill(xm,ym,facecolor=pb_cmap(i/float(len(times)-1)))
                 if plot_type == 'strat':
+                    red = (216/255.0, 27/255.0, 96/255.0)
+                    blue = (30/255.0,126/255.0, 229/255.0)
+                    green_North = (255/255.0, 193/255.0, 7/255.0) # vegetation color
+                    green_South = (0/255.0, 77/255.0, 64/255.0) # vegetation color
                     order += 1
                     plt.fill(xm, ym, 'xkcd:light tan', edgecolor='k', linewidth=0.25, zorder=order)
+                    plt.fill([xmin,xmax,xmax,xmin],[0,0,ymax,ymax],color=green_North)
+                    plt.fill([xmin,xmax,xmax,xmin],[ymin,ymin,0,0],color=green_South)
                 if plot_type == 'age':
                     order += 1
                     plt.fill(xm,ym,facecolor=age_cmap(i/float(n_channels-1)),edgecolor='k',linewidth=0.1,zorder=order)
@@ -413,7 +284,11 @@ class ChannelBelt:
                         plt.fill(xm,ym,color=ob_cmap(i/float(len(times)-1)))
                     if plot_type == 'strat':
                         order = order+1
-                        plt.fill(xm, ym, 'xkcd:ocean blue', edgecolor='k', linewidth=0.25, zorder=order)
+                        red = (216/255.0, 27/255.0, 96/255.0)
+                        blue = (30/255.0,126/255.0, 229/255.0)
+                        #plt.fill(xm, ym, ‘xkcd:ocean blue’, edgecolor=‘k’, linewidth=0.25, zorder=order)
+                        #plt.fill(xm, ym, color=(1.0,1.0,1.0), edgecolor=‘k’, linewidth=0.25, zorder=order)
+                        plt.fill(xm, ym, color=blue, edgecolor='k', linewidth=0.25, zorder=order)
                     if plot_type == 'age':
                         order += 1
                         plt.fill(xm, ym, 'xkcd:sea blue', edgecolor='k', linewidth=0.1, zorder=order)
@@ -639,7 +514,7 @@ def resample_centerline(x,y,z,deltas):
     dx, dy, dz, ds, s = compute_derivatives(x,y,z) # recompute derivatives
     return x,y,z,dx,dy,dz,ds,s
 
-def migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma,Cfs_north,Cfs_south):
+def migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma,Cfs_south,Cfs_north):
     '''migrate centerline during one time step, using the migration computed as in Howard & Knutson (1984)
 
     :param x: x-coordinates of centerline
@@ -661,15 +536,15 @@ def migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma,Cfs_north,Cfs_sou
     curv = compute_curvature(x,y)
     dx, dy, dz, ds, s = compute_derivatives(x,y,z)
     sinuosity = s[-1]/(x[-1]-x[0])
+    curv = W*curv # dimensionless curvature
+    R0 = kl*curv # simple linear relationship between curvature and nominal migration rate
     
-    # changed Cf to an array? 
+        # changed Cf to an array? 
     Cf = np.zeros(ns) # creating a vector of cfs 
     Cf[ y > max(y)/2] = Cfs_north # condition on north bank
     Cf[ y <= max(y)/2] = Cfs_south # condition on south bank
     alpha = k*2*Cf/D # exponent for convolution function G
-       
-    curv = W*curv # dimensionless curvature
-    R0 = kl*curv # simple linear relationship between curvature and nominal migration rate
+    
     
     R1 = compute_migration_rate(pad,ns,ds,alpha,omega,gamma,R0)
     R1 = sinuosity**(-2/3.0)*R1
@@ -729,7 +604,6 @@ def compute_migration_rate(pad,ns,ds,alpha,omega,gamma,R0):
     pad - padding (number of nodepoints along centerline)
     ns - number of points in centerline
     ds - distances between points in centerline
-    alpha - array of alphas (depending on Cfs)
     omega - constant in HK model
     gamma - constant in HK model
     R0 - nominal migration rate (dimensionless curvature * migration rate constant)"""
@@ -739,8 +613,7 @@ def compute_migration_rate(pad,ns,ds,alpha,omega,gamma,R0):
         pad1 = 5
     for i in range(pad1,ns-pad):
         si2 = np.hstack((np.array([0]),np.cumsum(ds[i-1::-1])))  # distance along centerline, backwards from current point 
-        # alpha[i-1::-1]
-        G = np.exp(-alpha[i]*si2) # convolution vector
+        G = np.exp(-alpha*si2) # convolution vector
         R1[i] = omega*R0[i] + gamma*np.sum(R0[i::-1]*G)/np.sum(G) # main equation
     return R1
 

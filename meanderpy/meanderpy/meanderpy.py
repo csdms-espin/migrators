@@ -211,6 +211,53 @@ class ChannelBelt:
                 self.cl_times.append(last_cl_time+(itn+1)*dt/(365*24*60*60.0))
                 channel = Channel(x,y,z,W,D) # create channel object
                 self.channels.append(channel)
+                
+    def sinuosity_list(self, nit, deltas, pad, crdist, depths, Cfs, kl, dt, Cfs_south, Cfs_north):
+        """this is just to calculate and return the sinuosity
+        
+        :param nit: number of iterations
+        :param deltas: distance between nodes on centerline
+        :param pad: padding (number of nodepoints along centerline)
+        :param crdist: threshold distance at which cutoffs occur
+        :param depths: array of channel depths (can very across iterations)
+        :param Cf: array of dimensionless Chezy friction factors (can vary across iterations)
+        :param kl: migration rate constant (m/s)
+        :param aggr_factor: aggradation factor
+        :param D: channel depth (m)"""
+        
+        channel = self.channels[-1] # first channel is the same as last channel of input 
+        x = channel.x; y = channel.y; z = channel.z
+        W = channel.W
+        D = channel.D
+        k = 1.0 # constant in HK equation
+        xc = [] # initialize cutoff coordinates
+        # determine age of last channel:
+        if len(self.cl_times)>0:
+            last_cl_time = self.cl_times[-1]
+        else:
+            last_cl_time = 0
+        dx, dy, dz, ds, s = compute_derivatives(x,y,z)
+        slope = np.gradient(z)/ds
+        # padding at the beginning can be shorter than padding at the downstream end:
+        pad1 = int(pad/10.0)
+        if pad1<5:
+            pad1 = 5
+        omega = -1.0 # constant in migration rate calculation (Howard and Knutson, 1984)
+        gamma = 2.5 # from Ikeda et al., 1981 and Howard and Knutson, 1984
+        sin_list = np.array([])
+        north_cutoff = 0
+        south_cutoff = 0
+    
+        for itn in trange(nit): # main loop
+            D = depths[itn]
+            Cf = Cfs[itn]
+            x, y, sinuosity = migrate_one_step(x,y,z,W,kl,dt,k,Cf,D,pad,pad1,omega,gamma,Cfs_south,Cfs_north)
+            sin_list = np.append(sin_list, sinuosity)
+            
+            x,y,z,xc,yc,zc = cut_off_cutoffs(x,y,z,s,crdist,deltas) # find and execute cutoffs
+            x,y,z,dx,dy,dz,ds,s = resample_centerline(x,y,z,deltas) # resample centerline
+            slope = np.gradient(z)/ds
+        return sin_list
 
     def plot(self, plot_type, pb_age, ob_age, end_time, n_channels):
         """method  for plotting ChannelBelt object
